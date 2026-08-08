@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>SPL Appendix Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --sheet:#EDF0F3; --panel:#FFFFFF; --line:#D3DBE1; --line-2:#E4E9ED;
+    --ink:#16252E; --muted:#5C6A74; --faint:#8A98A1;
+    --clear:#1F8A54; --clear-deep:#15653D; --clear-wash:#E7F3EC;
+    --amber:#B0761A; --amber-wash:#FBF1DF; --red:#B23A3A;
+    --steel:#8FA3B0;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Consolas,monospace;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--sheet); color:var(--ink); font-family:var(--ui);
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+    background-image:linear-gradient(var(--line-2) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line-2) 1px,transparent 1px);
+    background-size:28px 28px; background-position:-1px -1px;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;
+    border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:8px}
+  header.top h1{font-size:27px;font-weight:700;letter-spacing:-.01em;margin:6px 0 0}
+  header.top .sub{color:var(--muted);font-size:13.5px;max-width:52ch;margin-top:6px}
+  .stamp{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;line-height:1.7;
+    border:1px solid var(--line);padding:8px 11px;background:var(--panel);white-space:nowrap}
+  .stamp b{color:var(--ink);font-weight:600}
+
+  .rail{display:grid;grid-template-columns:20px 1fr;gap:18px;margin-top:30px}
+  .rail-line{background:
+     linear-gradient(var(--line),var(--line)) center/2px 100% no-repeat;position:relative}
+  .tick{position:absolute;left:50%;transform:translateX(-50%);width:11px;height:11px;border-radius:50%;
+     background:var(--panel);border:2px solid var(--steel)}
+  .tick.t1{top:6px}.tick.t2{top:50%}.tick.t3{bottom:6px}
+
+  section.step{background:var(--panel);border:1px solid var(--line);padding:20px 22px;margin-bottom:16px}
+  section.step > .hd{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+  section.step > .hd .n{font-family:var(--mono);font-size:12px;color:var(--clear-deep);font-weight:700}
+  section.step > .hd h2{font-size:15px;margin:0;font-weight:650;letter-spacing:.005em}
+  section.step > .hd .hint{margin-left:auto;font-size:12px;color:var(--faint)}
+
+  .drops{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:620px){.drops{grid-template-columns:1fr}.wrap{padding:28px 16px 60px}
+    header.top{flex-direction:column;align-items:flex-start}.stamp{text-align:left}}
+  .drop{border:1.5px dashed var(--line);background:#FCFDFE;padding:18px;cursor:pointer;
+    transition:border-color .15s,background .15s;position:relative;min-height:118px;display:flex;
+    flex-direction:column;justify-content:center}
+  .drop:hover{border-color:var(--steel)}
+  .drop.drag{border-color:var(--clear);background:var(--clear-wash);border-style:solid}
+  .drop.set{border-style:solid;border-color:var(--clear);background:var(--clear-wash)}
+  .drop .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .drop .req{color:var(--red)} .drop .opt{color:var(--faint);font-weight:500;letter-spacing:.08em}
+  .drop .big{font-weight:600;font-size:14.5px;margin-top:7px}
+  .drop .file{font-family:var(--mono);font-size:12px;color:var(--clear-deep);margin-top:7px;word-break:break-all}
+  .drop .meta{font-size:12px;color:var(--muted);margin-top:4px}
+  .drop input{display:none}
+
+  .opts{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
+  .abc{display:flex;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);padding:7px 12px;
+    font-size:13px;cursor:pointer;user-select:none;background:#FCFDFE}
+  .chip input{accent-color:var(--clear);width:15px;height:15px}
+  .chip.on{border-color:var(--clear);background:var(--clear-wash);color:var(--clear-deep);font-weight:600}
+  .adv{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+  .adv summary{cursor:pointer;font-size:12px;color:var(--muted);letter-spacing:.04em}
+  .field{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+  .field label{min-width:190px}
+  .field input[type=text]{font-family:var(--mono);font-size:12.5px;border:1px solid var(--line);
+    padding:7px 9px;background:#FCFDFE;color:var(--ink);min-width:180px}
+
+  .go{display:flex;align-items:center;gap:16px;margin-top:6px;flex-wrap:wrap}
+  button.run{font-family:var(--ui);font-size:14.5px;font-weight:650;letter-spacing:.01em;color:#fff;
+    background:var(--clear);border:1px solid var(--clear-deep);padding:12px 22px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:10px;transition:background .15s}
+  button.run:hover{background:var(--clear-deep)}
+  button.run:disabled{background:#B9C4CB;border-color:#A7B4BC;cursor:not-allowed}
+  button.run .dot{width:8px;height:8px;border-radius:50%;background:#fff;opacity:.9}
+  .status{font-size:13px;color:var(--muted);min-height:20px}
+  .status.err{color:var(--red)} .status.ok{color:var(--clear-deep)}
+
+  /* readout */
+  .readout{margin-top:22px;border:1px solid var(--ink);background:var(--panel);display:none}
+  .readout .rhd{display:flex;justify-content:space-between;align-items:center;
+    background:var(--ink);color:#EAF0F3;padding:9px 16px}
+  .readout .rhd .t{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:600}
+  .readout .rhd .f{font-family:var(--mono);font-size:11px;color:#9FB2BD}
+  .counters{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line)}
+  .counters div{padding:16px;border-right:1px solid var(--line)}
+  .counters div:last-child{border-right:none}
+  .counters .num{font-family:var(--mono);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .counters .cap{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+  @media(max-width:620px){.counters{grid-template-columns:repeat(2,1fr)}
+    .counters div:nth-child(2){border-right:none}}
+  .safety{padding:16px}
+  .safety .cap{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .bar{display:flex;height:22px;border:1px solid var(--line);overflow:hidden;font-size:11px;font-family:var(--mono)}
+  .bar span{display:flex;align-items:center;justify-content:center;color:#fff;white-space:nowrap;min-width:0}
+  .bar .sr{background:var(--clear)} .bar .nsr{background:var(--steel)} .bar .tbc{background:var(--amber)}
+  .legend{display:flex;gap:18px;margin-top:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:middle}
+
+  .gaps{border-top:1px solid var(--line);padding:16px;background:var(--amber-wash)}
+  .gaps.clean{background:var(--clear-wash)}
+  .gaps .cap{font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+  .gaps.clean .cap{color:var(--clear-deep)} .gaps:not(.clean) .cap{color:var(--amber)}
+  .gaps ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+  .gaps li{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);padding:3px 8px}
+  .gaps p{margin:0;font-size:13px;color:var(--muted)}
+  .dl{padding:16px;border-top:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  a.download{font-family:var(--ui);font-size:14px;font-weight:650;color:#fff;background:var(--ink);
+    border:1px solid #000;padding:11px 20px;text-decoration:none;display:inline-flex;gap:9px;align-items:center}
+  a.download:hover{background:#0c1a22}
+  .dl .note{font-size:12px;color:var(--muted)}
+  footer{margin-top:34px;font-size:12px;color:var(--faint);line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
+  footer code{font-family:var(--mono);color:var(--muted)}
+  .kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);padding:1px 5px;background:#FCFDFE;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="eyebrow">ETCS · V&amp;V Traceability</div>
+      <h1>SPL Appendix Generator</h1>
+      <div class="sub">Builds Appendices A, B and C from a QR_TS_SYS test-specification export and appends
+        them into a copy of the document. Everything runs in your browser — no files leave this page.</div>
+    </div>
+    <div class="stamp">
+      <div><b>A</b>&nbsp;Requirement Traceability</div>
+      <div><b>B</b>&nbsp;Test Suites</div>
+      <div><b>C</b>&nbsp;Test Cases</div>
+    </div>
+  </header>
+
+  <div class="rail">
+    <div class="rail-line"><i class="tick t1"></i><i class="tick t2"></i><i class="tick t3"></i></div>
+    <div>
+
+      <section class="step">
+        <div class="hd"><span class="n">01</span><h2>Load the documents</h2>
+          <span class="hint">.docx export required · .xlsx RVTM optional</span></div>
+        <div class="drops">
+          <label class="drop" id="dropDoc">
+            <div class="lbl">Test specification <span class="req">— required</span></div>
+            <div class="big" data-idle>Drop the export here, or browse</div>
+            <div class="meta" data-idle>Must be <b>.docx</b> — save legacy <code>.doc</code> as .docx in Word first.</div>
+            <input type="file" id="fileDoc" accept=".docx"/>
+          </label>
+          <label class="drop" id="dropXls">
+            <div class="lbl">RVTM / SRS lookup <span class="opt">— optional</span></div>
+            <div class="big" data-idle>Drop the RVTM here, or browse</div>
+            <div class="meta" data-idle>Safety tag for Appendix A (auto-reads the safety column). Without it, that column shows <b>TBC</b>.</div>
+            <input type="file" id="fileXls" accept=".xlsx,.xlsm,.csv"/>
+          </label>
+        </div>
+      </section>
+
+      <section class="step">
+        <div class="hd"><span class="n">02</span><h2>Choose what to generate</h2></div>
+        <div class="opts">
+          <div class="abc" id="abc">
+            <label class="chip on"><input type="checkbox" value="A" checked/>Appendix A</label>
+            <label class="chip on"><input type="checkbox" value="B" checked/>Appendix B</label>
+            <label class="chip on"><input type="checkbox" value="C" checked/>Appendix C</label>
+          </div>
+        </div>
+        <details class="adv">
+          <summary>Advanced</summary>
+          <div class="field">
+            <label for="srs">SRS revision text (Appendix A header)</label>
+            <input type="text" id="srs" value="11.00 [5]"/>
+          </div>
+          <div class="field">
+            <label for="ph">Placeholder when safety unknown</label>
+            <input type="text" id="ph" value="TBC"/>
+          </div>
+        </details>
+      </section>
+
+      <section class="step">
+        <div class="hd"><span class="n">03</span><h2>Generate</h2></div>
+        <div class="go">
+          <button class="run" id="run" disabled><span class="dot"></span>Generate appendices</button>
+          <div class="status" id="status">Waiting for a test-specification .docx.</div>
+        </div>
+
+        <div class="readout" id="readout">
+          <div class="rhd"><span class="t">Traceability readout</span><span class="f" id="rfile"></span></div>
+          <div class="counters">
+            <div><div class="num" id="cSuites">—</div><div class="cap">Test Suites</div></div>
+            <div><div class="num" id="cCases">—</div><div class="cap">Test Cases</div></div>
+            <div><div class="num" id="cReqs">—</div><div class="cap">Requirements</div></div>
+            <div><div class="num" id="cRows">—</div><div class="cap">Appendix A rows</div></div>
+          </div>
+          <div class="safety" id="safetyBlock">
+            <div class="cap">Safety classification (Appendix A)</div>
+            <div class="bar" id="bar"></div>
+            <div class="legend">
+              <span><i style="background:var(--clear)"></i><span id="lSr">Safety Related</span></span>
+              <span><i style="background:var(--steel)"></i><span id="lNsr">Not Safety Related</span></span>
+              <span><i style="background:var(--amber)"></i><span id="lTbc">TBC</span></span>
+            </div>
+          </div>
+          <div class="gaps" id="gaps"></div>
+          <div class="dl">
+            <a class="download" id="download" href="#" download>Download Word document</a>
+            <span class="note" id="dlnote"></span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <footer>
+    Runs entirely offline in your browser (JSZip + SheetJS). Your original file is never modified — the
+    appendices are appended to a fresh copy. Host it anywhere (e.g. GitHub Pages) or just open this file.
+    &nbsp;<span class="kbd">.docx in · .docx out</span>
+  </footer>
+</div>
+
+<script>
+/* ===== embedded core (validated against the Python tool, byte-identical output) ===== */
+const TS_ID=/^QR_TS_SYS_[A-Za-z]+_\d+/, TC_RE=/(QR_TC_SYS_\d+[A-Za-z]*)\s*-\s*([\s\S]*)/,
+      REQ_RE=/SYS_\d+/g, HEADER_FILL="1578BD", HEADER_TEXT="FFFFFF", HEAD_COLOR="1F3864",
+      BORDER="D9D9D9", TABLE_FONT="Calibri", TABLE_SZ="20", HDR_H="315", DATA_H="300";
+const childElements=n=>n?Array.prototype.filter.call(n.childNodes||[],c=>c.nodeType===1):[];
+const firstByName=(n,name)=>childElements(n).find(c=>c.nodeName===name);
+function textOf(node){let out="";(function walk(n){for(const c of n.childNodes||[]){
+  if(c.nodeType===1&&c.nodeName==="w:t")out+=c.textContent||"";
+  else if(c.nodeType===1&&c.nodeName!=="w:tbl")walk(c);}})(node);return out;}
+const norm=s=>(s||"").replace(/\s+/g," ").trim();
+function extractReqs(text){const out=[];let m;REQ_RE.lastIndex=0;
+  while((m=REQ_RE.exec(text))!==null){const pre=text.slice(Math.max(0,m.index-3),m.index);
+    if(pre.endsWith("TC_")||pre.endsWith("TS_"))continue;out.push(m[0]);}return out;}
+function gridSpanOf(tc){const p=firstByName(tc,"w:tcPr");if(!p)return 1;const g=firstByName(p,"w:gridSpan");
+  if(!g)return 1;const v=parseInt(g.getAttribute("w:val"),10);return isNaN(v)?1:v;}
+const physCells=row=>childElements(row).filter(c=>c.nodeName==="w:tc").map(c=>textOf(c));
+function gridCells(row){const out=[];for(const tc of childElements(row).filter(c=>c.nodeName==="w:tc")){
+  const t=textOf(tc),s=gridSpanOf(tc);for(let i=0;i<s;i++)out.push(t);}return out;}
+function parseDocx(xml){const doc=new DOMParser().parseFromString(xml,"application/xml");
+  const body=firstByName(doc.documentElement,"w:body");
+  if(!body)throw new Error("No document body found — is this a valid Word .docx export?");
+  const suites=[];let cur=null;
+  for(const el of childElements(body)){
+    if(el.nodeName==="w:p"){const t=norm(textOf(el));
+      if(t.startsWith("QR_TS_SYS_")){const m=t.match(TS_ID);if(m)cur=m[0];}}
+    else if(el.nodeName==="w:tbl"){if(cur){suites.push(parseSuite(el,cur));cur=null;}}}
+  return suites;}
+function parseSuite(tbl,sid){
+  const rows=childElements(tbl).filter(c=>c.nodeName==="w:tr");
+  const desc=rows.length>1?norm(gridCells(rows[1])[0]||""):"";
+  let exec="";
+  for(let i=0;i<rows.length;i++){const g=gridCells(rows[i]);const j=g.indexOf("Execution");
+    if(j>=0&&i+1<rows.length){exec=(gridCells(rows[i+1])[j]||"").trim();break;}}
+  const tcs=[];let cur=null;
+  for(const row of rows){const phys=physCells(row);const first=(phys[0]||"").trim();
+    if(first==="TC"){const val=phys.find((x,i)=>i>0&&x.trim())||"";const m=val.match(TC_RE);
+      if(m){cur=[m[1],norm(m[2]),[]];tcs.push(cur);}}
+    else if(/^\d/.test(first)&&cur){const ids=extractReqs(phys.join(" "));
+      for(const r of ids)if(!cur[2].includes(r))cur[2].push(r);}}
+  return {sid,desc,exec,tcs};}
+const SAFE_YES=new Set(["safety related","safety-related","safety","yes","y","true","1","sr"]);
+const SAFE_NO=new Set(["not safety related","not safety-related","non safety related","non-safety related","not safety","no","n","false","0","nsr"]);
+const isReq=v=>/^SYS_\d+$/.test(String(v).trim());
+function normSafety(v){const s=String(v).trim().toLowerCase();
+  if(SAFE_YES.has(s))return "Safety Related";if(SAFE_NO.has(s))return "Not Safety Related";
+  return String(v).trim()||null;}
+function pickBestRows(sheets){let best=[],sc=-1;for(const rows of sheets){let h=0;
+  for(const r of rows)for(const c of r)if(isReq(c))h++;if(h>sc){sc=h;best=rows;}}return best;}
+function buildSafetyMap(rows){if(!rows||!rows.length)return{map:{},reqHeader:null,safHeader:null};
+  const header=rows[0].map(h=>String(h==null?"":h)),hlow=header.map(h=>h.trim().toLowerCase());
+  let ci=-1,sc=-1;for(let i=0;i<header.length;i++){let h=0;for(let r=1;r<rows.length;r++)if(isReq(rows[r][i]))h++;
+    if(h>sc){sc=h;ci=i;}}
+  let cs=hlow.findIndex(h=>h.includes("safety"));
+  if(cs<0){let best=-1;for(let i=0;i<header.length;i++){let h=0;for(let r=1;r<rows.length;r++){
+    const v=String(rows[r][i]==null?"":rows[r][i]).trim().toLowerCase();if(SAFE_YES.has(v)||SAFE_NO.has(v))h++;}
+    if(h>best){best=h;cs=i;}}}
+  const map={};for(let r=1;r<rows.length;r++){const rid=String(rows[r][ci]==null?"":rows[r][ci]).trim();
+    if(isReq(rid)){const v=normSafety(rows[r][cs]);if(v)map[rid]=v;}}
+  return {map,reqHeader:header[ci]||null,safHeader:header[cs]||null};}
+function aggregate(suites,safety,which,srs,ph,hasRvtm){safety=safety||{};ph=ph||"TBC";
+  const tcDesc={},tcSuites={};
+  for(const s of suites)for(const[tid,td]of s.tcs){if(!(tid in tcDesc))tcDesc[tid]=td;
+    (tcSuites[tid]=tcSuites[tid]||[]);if(!tcSuites[tid].includes(s.sid))tcSuites[tid].push(s.sid);}
+  const out=[];
+  if(which.includes("A")){const rows=[],seen=new Set(),excluded=new Set();
+    for(const s of suites)for(const[tid,,reqs]of s.tcs)for(const rid of reqs){
+      if(hasRvtm&&!(rid in safety)){excluded.add(rid);continue;}
+      const k=rid+"|"+tid+"|"+s.sid;if(!seen.has(k)){seen.add(k);rows.push([rid,safety[rid]||ph,tid,s.sid]);}}
+    out.push({letter:"A",title:"APPENDIX A. Requirement Traceability Matrix",
+      headers:["Requirement ID","Safety related requirements from SRS revision "+srs,"Test Case ID","Test Suite ID"],
+      rows,widths:[1560,2976,1754,2835],excluded:[...excluded].sort()});}
+  if(which.includes("B")){const rows=[];
+    for(const s of suites){const tl=[];for(const[tid]of s.tcs)if(!tl.includes(tid))tl.push(tid);
+      rows.push([s.sid,s.desc,s.exec,tl.join(", ")]);}
+    out.push({letter:"B",title:"APPENDIX B. Test Suites Traceability Matrix",
+      headers:["Test Suite","Description","Execution","Associated Test Cases"],rows,widths:[3067,3198,1245,2118]});}
+  if(which.includes("C")){const rows=Object.keys(tcDesc).map(t=>[t,tcDesc[t],(tcSuites[t]||[]).join(", ")]);
+    out.push({letter:"C",title:"APPENDIX C. Test Cases Traceability Matrix",
+      headers:["Test Case","Description","Associated Test Suites"],rows,widths:[1838,4111,3679]});}
+  return out;}
+const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+function cellXml(t,w,o){o=o||{};const shd=o.fill?`<w:shd w:val="clear" w:color="auto" w:fill="${o.fill}"/>`:"";
+  const b=o.bold?"<w:b/>":"";const col=o.color?`<w:color w:val="${o.color}"/>`:"";
+  const rpr=`<w:rPr>${b}${col}<w:rFonts w:ascii="${TABLE_FONT}" w:hAnsi="${TABLE_FONT}" w:cs="${TABLE_FONT}"/><w:sz w:val="${TABLE_SZ}"/><w:szCs w:val="${TABLE_SZ}"/></w:rPr>`;
+  return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${shd}<w:vAlign w:val="center"/></w:tcPr>`+
+    `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r>${rpr}<w:t xml:space="preserve">${esc(t)}</w:t></w:r></w:p></w:tc>`;}
+function tableXml(headers,rows,widths){
+  const edges={top:"none",left:"none",right:"none",bottom:"single",insideH:"single",insideV:"single"};
+  const borders=Object.keys(edges).map(e=>{const v=edges[e];
+    return `<w:${e} w:val="${v}" w:sz="${v==="single"?"4":"0"}" w:space="0" w:color="${v==="single"?BORDER:"auto"}"/>`;}).join("");
+  const grid=widths.map(w=>`<w:gridCol w:w="${w}"/>`).join("");
+  const hdr=`<w:tr><w:trPr><w:trHeight w:val="${HDR_H}" w:hRule="atLeast"/><w:tblHeader/></w:trPr>`+
+    headers.map((h,i)=>cellXml(h,widths[i],{fill:HEADER_FILL,bold:true,color:HEADER_TEXT})).join("")+"</w:tr>";
+  const body=rows.map(r=>`<w:tr><w:trPr><w:trHeight w:val="${DATA_H}" w:hRule="atLeast"/></w:trPr>`+
+    r.map((c,i)=>cellXml(c,widths[i])).join("")+"</w:tr>").join("");
+  return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:jc w:val="center"/><w:tblLayout w:type="fixed"/>`+
+    `<w:tblBorders>${borders}</w:tblBorders>`+
+    `<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>`+
+    `</w:tblPr><w:tblGrid>${grid}</w:tblGrid>${hdr}${body}</w:tbl>`;}
+function headingXml(title){return `<w:p><w:pPr><w:keepNext/><w:outlineLvl w:val="0"/><w:spacing w:before="240" w:after="120"/></w:pPr>`+
+  `<w:r><w:rPr><w:b/><w:color w:val="${HEAD_COLOR}"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>`+
+  `<w:t xml:space="preserve">${esc(title)}</w:t></w:r></w:p>`;}
+function captionXml(letter,subtitle){return `<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr>`+
+  `<w:r><w:t xml:space="preserve">Table ${letter}-</w:t></w:r>`+
+  `<w:fldSimple w:instr=" SEQ Table_${letter} \\* ARABIC "><w:r><w:t>1</w:t></w:r></w:fldSimple>`+
+  `<w:r><w:t xml:space="preserve"> ${esc(subtitle)}</w:t></w:r></w:p>`;}
+function buildAppendixXml(apps){let xml=`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+  for(const a of apps){const subtitle=a.title.replace(/^APPENDIX\s+[A-Z]\.\s*/,"");
+    xml+=headingXml(a.title)+tableXml(a.headers,a.rows,a.widths)+captionXml(a.letter,subtitle)+`<w:p/>`;}
+  return xml;}
+function injectAppendices(xml,app){const i=xml.lastIndexOf("<w:sectPr");
+  if(i>=0)return xml.slice(0,i)+app+xml.slice(i);
+  const b=xml.lastIndexOf("</w:body>");if(b>=0)return xml.slice(0,b)+app+xml.slice(b);
+  throw new Error("Could not locate the document body to insert appendices.");}
+
+/* ===== UI wiring ===== */
+const $=id=>document.getElementById(id);
+const state={docBuf:null,docName:null,xlsRows:null,xlsName:null};
+const statusEl=$("status");
+function setStatus(msg,cls){statusEl.className="status"+(cls?" "+cls:"");statusEl.textContent=msg;}
+function refreshRun(){$("run").disabled=!state.docBuf;}
+
+function wireDrop(dropId,inputId,onFile,exts){
+  const drop=$(dropId),input=$(inputId);
+  drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("drag");});
+  drop.addEventListener("dragleave",()=>drop.classList.remove("drag"));
+  drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("drag");
+    if(e.dataTransfer.files[0])handle(e.dataTransfer.files[0]);});
+  input.addEventListener("change",e=>{if(e.target.files[0])handle(e.target.files[0]);});
+  function handle(file){
+    const ok=exts.some(x=>file.name.toLowerCase().endsWith(x));
+    if(!ok){
+      if(file.name.toLowerCase().endsWith(".doc"))
+        setStatus("That's a legacy .doc — a browser can't read it. Open it in Word and Save As .docx first.","err");
+      else setStatus("Unexpected file type. Expected: "+exts.join(", "),"err");
+      return;
+    }
+    onFile(file,drop);
+  }
+}
+function markSet(drop,title,file,meta){
+  drop.classList.add("set");
+  drop.querySelectorAll("[data-idle]").forEach(e=>e.remove());
+  drop.querySelector(".file")?.remove();
+  const b=document.createElement("div");b.className="file";b.textContent=file;
+  const m=document.createElement("div");m.className="meta";m.innerHTML=meta;
+  drop.appendChild(b);drop.appendChild(m);
+}
+
+wireDrop("dropDoc","fileDoc",async(file,drop)=>{
+  setStatus("Reading export…");
+  state.docBuf=await file.arrayBuffer();state.docName=file.name;
+  markSet(drop,"Export loaded",file.name,"Ready.");
+  setStatus("Export loaded. Add an RVTM for Appendix A safety tags, or generate now.","ok");
+  refreshRun();
+},[".docx"]);
+
+wireDrop("dropXls","fileXls",async(file,drop)=>{
+  setStatus("Reading RVTM… (large workbooks take a few seconds)");
+  try{
+    const buf=await file.arrayBuffer();
+    await new Promise(r=>setTimeout(r,10));
+    const wb=XLSX.read(buf,{type:"array",cellStyles:false,cellFormula:false,cellDates:false});
+    const sheets=wb.SheetNames.map(n=>{
+      const ws=wb.Sheets[n];let range=ws["!ref"]||"A1:A1";
+      const dec=XLSX.utils.decode_range(range);
+      if(dec.e.r-dec.s.r>60000)dec.e.r=dec.s.r+60000; // guard inflated dimensions
+      return XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false,defval:"",range:dec});
+    });
+    const best=pickBestRows(sheets);
+    const {map,reqHeader,safHeader}=buildSafetyMap(best);
+    const n=Object.keys(map).length;
+    if(!n){setStatus("Couldn't find requirement / safety columns in that workbook. Appendix A will show the placeholder.","err");
+      state.xlsRows=null;markSet(drop,"",file.name,"No safety data detected.");return;}
+    state.xlsRows={map,reqHeader,safHeader,count:n};state.xlsName=file.name;
+    markSet(drop,"",file.name,
+      `Safety column <b>${esc(safHeader)}</b> · <b>${n.toLocaleString()}</b> classifications.`);
+    setStatus("RVTM loaded — Appendix A safety tags will be filled in.","ok");
+  }catch(err){setStatus("Could not read that workbook: "+err.message,"err");}
+},[".xlsx",".xlsm",".csv"]);
+
+$("abc").addEventListener("change",e=>{
+  const chip=e.target.closest(".chip");if(chip)chip.classList.toggle("on",e.target.checked);});
+
+function selectedAppendices(){
+  return Array.from($("abc").querySelectorAll("input:checked")).map(i=>i.value);}
+
+$("run").addEventListener("click",async()=>{
+  const which=selectedAppendices();
+  if(!which.length){setStatus("Pick at least one appendix (A, B or C).","err");return;}
+  $("run").disabled=true;setStatus("Parsing test suites…");
+  try{
+    await new Promise(r=>setTimeout(r,10));
+    const zip=await JSZip.loadAsync(state.docBuf);
+    const docFile=zip.file("word/document.xml");
+    if(!docFile)throw new Error("This .docx has no word/document.xml — is it a valid Word file?");
+    const xml=await docFile.async("string");
+    const suites=parseDocx(xml);
+    if(!suites.length)throw new Error("No QR_TS_SYS test suites found in this document.");
+
+    const safety=state.xlsRows?state.xlsRows.map:{};
+    const hasRvtm=!!state.xlsRows;
+    const ph=$("ph").value.trim()||"TBC";
+    const srs=$("srs").value.trim();
+    setStatus("Building appendices…");
+    await new Promise(r=>setTimeout(r,10));
+    const apps=aggregate(suites,safety,which,srs,ph,hasRvtm);
+
+    const appXml=buildAppendixXml(apps);
+    zip.file("word/document.xml",injectAppendices(xml,appXml));
+    setStatus("Packaging document…");
+    const blob=await zip.generateAsync({type:"blob",
+      mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+
+    // ---- readout ----
+    const tcSet=new Set(),reqSet=new Set();
+    for(const s of suites)for(const[tid,,rs]of s.tcs){tcSet.add(tid);rs.forEach(r=>reqSet.add(r));}
+    $("cSuites").textContent=suites.length.toLocaleString();
+    $("cCases").textContent=tcSet.size.toLocaleString();
+    $("cReqs").textContent=reqSet.size.toLocaleString();
+    const A=apps.find(a=>a.letter==="A");
+    $("cRows").textContent=A?A.rows.length.toLocaleString():"—";
+    $("rfile").textContent=state.docName;
+
+    // safety bar
+    const safetyBlock=$("safetyBlock");
+    if(A){
+      safetyBlock.style.display="";
+      const d={};for(const r of A.rows)d[r[1]]=(d[r[1]]||0)+1;
+      const sr=d["Safety Related"]||0,nsr=d["Not Safety Related"]||0,tbc=d[ph]||0,
+            other=A.rows.length-sr-nsr-tbc,tot=A.rows.length||1;
+      const bar=$("bar");bar.innerHTML="";
+      const seg=(cls,val,lbl)=>{if(val<=0)return;const s=document.createElement("span");
+        s.className=cls;s.style.flex=val;s.title=lbl+": "+val;
+        s.textContent=(val/tot>0.06)?val:"";bar.appendChild(s);};
+      seg("sr",sr,"Safety Related");seg("nsr",nsr+other,"Not Safety Related");seg("tbc",tbc,ph);
+      $("lSr").textContent=`Safety Related · ${sr.toLocaleString()}`;
+      $("lNsr").textContent=`Not Safety Related · ${(nsr+other).toLocaleString()}`;
+      $("lTbc").textContent=`${ph} · ${tbc.toLocaleString()}`;
+    }else safetyBlock.style.display="none";
+
+    // gaps: requirements excluded from Appendix A because they're not in the RVTM
+    const gaps=$("gaps");
+    if(state.xlsRows){
+      const excluded=(A&&A.excluded)?A.excluded:[];
+      if(excluded.length){gaps.className="gaps";
+        gaps.innerHTML=`<div class="cap">${excluded.length} requirement(s) not found in the RVTM — highlighted here and excluded from Appendix A</div>`+
+          "<ul>"+excluded.map(m=>`<li>${esc(m)}</li>`).join("")+"</ul>";}
+      else{gaps.className="gaps clean";
+        gaps.innerHTML=`<div class="cap">Full coverage</div><p>Every requirement in the export is classified in the RVTM. Nothing was excluded.</p>`;}
+    }else{gaps.className="gaps";
+      gaps.innerHTML=`<div class="cap">No RVTM loaded</div><p>Appendix A safety column is set to ${esc(ph)}, and nothing is excluded. Add the RVTM and generate again to classify and screen requirements.</p>`;}
+
+    // download
+    const outName=state.docName.replace(/\.docx$/i,"")+"_with_appendices.docx";
+    const url=URL.createObjectURL(blob);
+    const dl=$("download");dl.href=url;dl.setAttribute("download",outName);
+    $("dlnote").textContent=`${outName} · ${(blob.size/1048576).toFixed(1)} MB · original unchanged`;
+
+    $("readout").style.display="block";
+    setStatus(`Done — ${apps.map(a=>"Appendix "+a.letter+" ("+a.rows.length.toLocaleString()+" rows)").join(", ")}. Scroll down to the Download button.`,"ok");
+    $("readout").scrollIntoView({behavior:"smooth",block:"nearest"});
+  }catch(err){setStatus("Error: "+err.message,"err");}
+  finally{$("run").disabled=!state.docBuf;}
+});
+</script>
+</body>
+</html>
