@@ -232,7 +232,8 @@
 <script>
 /* ===== embedded core (validated against the Python tool, byte-identical output) ===== */
 const TS_ID=/^QR_TS_SYS_[A-Za-z]+_\d+/, TC_RE=/(QR_TC_SYS_\d+[A-Za-z]*)\s*-\s*([\s\S]*)/,
-      REQ_RE=/SYS_\d+/g, HEADER_FILL="D9E2F3", HEAD_COLOR="1F3864", BORDER="808080";
+      REQ_RE=/SYS_\d+/g, HEADER_FILL="1578BD", HEADER_TEXT="FFFFFF", HEAD_COLOR="1F3864",
+      BORDER="D9D9D9", TABLE_FONT="Calibri", TABLE_SZ="20", HDR_H="315", DATA_H="300";
 const childElements=n=>n?Array.prototype.filter.call(n.childNodes||[],c=>c.nodeType===1):[];
 const firstByName=(n,name)=>childElements(n).find(c=>c.nodeName===name);
 function textOf(node){let out="";(function walk(n){for(const c of n.childNodes||[]){
@@ -299,36 +300,46 @@ function aggregate(suites,safety,which,srs,ph,hasRvtm){safety=safety||{};ph=ph||
       const k=rid+"|"+tid+"|"+s.sid;if(!seen.has(k)){seen.add(k);rows.push([rid,safety[rid]||ph,tid,s.sid]);}}
     out.push({letter:"A",title:"APPENDIX A. Requirement Traceability Matrix",
       headers:["Requirement ID","Safety related requirements from SRS revision "+srs,"Test Case ID","Test Suite ID"],
-      rows,widths:[1800,3200,2200,2200],excluded:[...excluded].sort()});}
+      rows,widths:[1560,2976,1754,2835],excluded:[...excluded].sort()});}
   if(which.includes("B")){const rows=[];
     for(const s of suites){const tl=[];for(const[tid]of s.tcs)if(!tl.includes(tid))tl.push(tid);
       rows.push([s.sid,s.desc,s.exec,tl.join(", ")]);}
     out.push({letter:"B",title:"APPENDIX B. Test Suites Traceability Matrix",
-      headers:["Test Suite","Description","Execution","Associated Test Cases"],rows,widths:[2400,3600,1200,2200]});}
+      headers:["Test Suite","Description","Execution","Associated Test Cases"],rows,widths:[3067,3198,1245,2118]});}
   if(which.includes("C")){const rows=Object.keys(tcDesc).map(t=>[t,tcDesc[t],(tcSuites[t]||[]).join(", ")]);
     out.push({letter:"C",title:"APPENDIX C. Test Cases Traceability Matrix",
-      headers:["Test Case","Description","Associated Test Suites"],rows,widths:[2200,4200,3000]});}
+      headers:["Test Case","Description","Associated Test Suites"],rows,widths:[1838,4111,3679]});}
   return out;}
 const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 function cellXml(t,w,o){o=o||{};const shd=o.fill?`<w:shd w:val="clear" w:color="auto" w:fill="${o.fill}"/>`:"";
-  const b=o.bold?"<w:b/>":"";
-  return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${shd}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr>`+
-    `<w:r><w:rPr>${b}<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t xml:space="preserve">${esc(t)}</w:t></w:r></w:p></w:tc>`;}
+  const b=o.bold?"<w:b/>":"";const col=o.color?`<w:color w:val="${o.color}"/>`:"";
+  const rpr=`<w:rPr>${b}${col}<w:rFonts w:ascii="${TABLE_FONT}" w:hAnsi="${TABLE_FONT}" w:cs="${TABLE_FONT}"/><w:sz w:val="${TABLE_SZ}"/><w:szCs w:val="${TABLE_SZ}"/></w:rPr>`;
+  return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${shd}<w:vAlign w:val="center"/></w:tcPr>`+
+    `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r>${rpr}<w:t xml:space="preserve">${esc(t)}</w:t></w:r></w:p></w:tc>`;}
 function tableXml(headers,rows,widths){
-  const borders=["top","left","bottom","right","insideH","insideV"]
-    .map(e=>`<w:${e} w:val="single" w:sz="4" w:space="0" w:color="${BORDER}"/>`).join("");
+  const edges={top:"none",left:"none",right:"none",bottom:"single",insideH:"single",insideV:"single"};
+  const borders=Object.keys(edges).map(e=>{const v=edges[e];
+    return `<w:${e} w:val="${v}" w:sz="${v==="single"?"4":"0"}" w:space="0" w:color="${v==="single"?BORDER:"auto"}"/>`;}).join("");
   const grid=widths.map(w=>`<w:gridCol w:w="${w}"/>`).join("");
-  const hdr="<w:tr><w:trPr><w:tblHeader/></w:trPr>"+headers.map((h,i)=>cellXml(h,widths[i],{fill:HEADER_FILL,bold:true})).join("")+"</w:tr>";
-  const body=rows.map(r=>"<w:tr>"+r.map((c,i)=>cellXml(c,widths[i])).join("")+"</w:tr>").join("");
-  return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblLayout w:type="fixed"/>`+
+  const hdr=`<w:tr><w:trPr><w:trHeight w:val="${HDR_H}" w:hRule="atLeast"/><w:tblHeader/></w:trPr>`+
+    headers.map((h,i)=>cellXml(h,widths[i],{fill:HEADER_FILL,bold:true,color:HEADER_TEXT})).join("")+"</w:tr>";
+  const body=rows.map(r=>`<w:tr><w:trPr><w:trHeight w:val="${DATA_H}" w:hRule="atLeast"/></w:trPr>`+
+    r.map((c,i)=>cellXml(c,widths[i])).join("")+"</w:tr>").join("");
+  return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:jc w:val="center"/><w:tblLayout w:type="fixed"/>`+
     `<w:tblBorders>${borders}</w:tblBorders>`+
     `<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>`+
     `</w:tblPr><w:tblGrid>${grid}</w:tblGrid>${hdr}${body}</w:tbl>`;}
 function headingXml(title){return `<w:p><w:pPr><w:keepNext/><w:outlineLvl w:val="0"/><w:spacing w:before="240" w:after="120"/></w:pPr>`+
   `<w:r><w:rPr><w:b/><w:color w:val="${HEAD_COLOR}"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>`+
   `<w:t xml:space="preserve">${esc(title)}</w:t></w:r></w:p>`;}
+function captionXml(letter,subtitle){return `<w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr>`+
+  `<w:r><w:t xml:space="preserve">Table ${letter}-</w:t></w:r>`+
+  `<w:fldSimple w:instr=" SEQ Table_${letter} \\* ARABIC "><w:r><w:t>1</w:t></w:r></w:fldSimple>`+
+  `<w:r><w:t xml:space="preserve"> ${esc(subtitle)}</w:t></w:r></w:p>`;}
 function buildAppendixXml(apps){let xml=`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
-  for(const a of apps)xml+=headingXml(a.title)+tableXml(a.headers,a.rows,a.widths)+`<w:p/>`;return xml;}
+  for(const a of apps){const subtitle=a.title.replace(/^APPENDIX\s+[A-Z]\.\s*/,"");
+    xml+=headingXml(a.title)+tableXml(a.headers,a.rows,a.widths)+captionXml(a.letter,subtitle)+`<w:p/>`;}
+  return xml;}
 function injectAppendices(xml,app){const i=xml.lastIndexOf("<w:sectPr");
   if(i>=0)return xml.slice(0,i)+app+xml.slice(i);
   const b=xml.lastIndexOf("</w:body>");if(b>=0)return xml.slice(0,b)+app+xml.slice(b);
